@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from services.claude_fs import discover_projects, list_memory_files
-from db import get_db
+from db import db_connection
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -11,14 +11,13 @@ def dashboard():
     projects = discover_projects()
 
     # Get recent sessions from cache
-    db = get_db()
-    recent = db.execute("""
-        SELECT session_id, project_path, first_message, started_at, model, message_count
-        FROM sessions ORDER BY started_at DESC LIMIT 20
-    """).fetchall()
+    with db_connection() as db:
+        recent = db.execute("""
+            SELECT session_id, project_path, first_message, started_at, model, message_count
+            FROM sessions ORDER BY started_at DESC LIMIT 20
+        """).fetchall()
 
-    total_sessions = db.execute("SELECT COUNT(*) as c FROM sessions").fetchone()["c"]
-    db.close()
+        total_sessions = db.execute("SELECT COUNT(*) as c FROM sessions").fetchone()["c"]
 
     # Active threads across all projects
     active_threads = []

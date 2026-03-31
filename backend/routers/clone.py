@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from db import get_db
+from db import db_connection
 from config import PROJECTS_DIR
 
 router = APIRouter(prefix="/api/clone", tags=["clone"])
@@ -19,11 +19,10 @@ class CloneRequest(BaseModel):
 @router.post("")
 def clone_session(body: CloneRequest):
     """Extract context from a session and create a thread file."""
-    db = get_db()
-    row = db.execute(
-        "SELECT * FROM sessions WHERE session_id = ?", (body.session_id,)
-    ).fetchone()
-    db.close()
+    with db_connection() as db:
+        row = db.execute(
+            "SELECT * FROM sessions WHERE session_id = ?", (body.session_id,)
+        ).fetchone()
 
     if not row:
         raise HTTPException(404, "Session not found")

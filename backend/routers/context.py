@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-from db import get_db
+from db import db_connection
 
 router = APIRouter(prefix="/api/context", tags=["context"])
 
@@ -31,37 +31,35 @@ def _format_entry(row) -> dict:
 def list_context(
     project: str = Query("", description="Filter by project (empty = all)"),
     type: Optional[str] = Query(None),
-    q: Optional[str] = Query(None),
-    tag: Optional[str] = Query(None),
+    q: Optional[str] = Query(None, max_length=200),
+    tag: Optional[str] = Query(None, max_length=100),
     limit: int = Query(100, ge=1, le=500),
 ):
     """List context branches with optional filters."""
-    db = get_db()
+    with db_connection() as db:
+        query = "SELECT * FROM context_branches WHERE 1=1"
+        params: list = []
 
-    query = "SELECT * FROM context_branches WHERE 1=1"
-    params: list = []
+        if project:
+            query += " AND project = ?"
+            params.append(project)
 
-    if project:
-        query += " AND project = ?"
-        params.append(project)
+        if type:
+            query += " AND type = ?"
+            params.append(type)
 
-    if type:
-        query += " AND type = ?"
-        params.append(type)
+        if q:
+            query += " AND (content LIKE ? OR summary LIKE ? OR tags LIKE ?)"
+            params.extend([f"%{q}%", f"%{q}%", f"%{q}%"])
 
-    if q:
-        query += " AND (content LIKE ? OR summary LIKE ? OR tags LIKE ?)"
-        params.extend([f"%{q}%", f"%{q}%", f"%{q}%"])
+        if tag:
+            query += ' AND tags LIKE ?'
+            params.append(f'%"{tag}"%')
 
-    if tag:
-        query += ' AND tags LIKE ?'
-        params.append(f'%"{tag}"%')
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
 
-    query += " ORDER BY created_at DESC LIMIT ?"
-    params.append(limit)
-
-    rows = db.execute(query, params).fetchall()
-    db.close()
+        rows = db.execute(query, params).fetchall()
 
     return {"results": [_format_entry(r) for r in rows], "total": len(rows)}
 
@@ -71,19 +69,17 @@ def list_context(
 @router.get("/stats")
 def context_stats(project: str = Query("", description="Filter by project")):
     """Get counts by type."""
-    db = get_db()
+    with db_connection() as db:
+        if project:
+            rows = db.execute(
+                "SELECT type, COUNT(*) as count FROM context_branches WHERE project = ? GROUP BY type",
+                (project,)
+            ).fetchall()
+        else:
+            rows = db.execute(
+                "SELECT type, COUNT(*) as count FROM context_branches GROUP BY type"
+            ).fetchall()
 
-    if project:
-        rows = db.execute(
-            "SELECT type, COUNT(*) as count FROM context_branches WHERE project = ? GROUP BY type",
-            (project,)
-        ).fetchall()
-    else:
-        rows = db.execute(
-            "SELECT type, COUNT(*) as count FROM context_branches GROUP BY type"
-        ).fetchall()
-
-    db.close()
     stats = {r["type"]: r["count"] for r in rows}
     return {"stats": stats, "total": sum(stats.values())}
 
@@ -104,17 +100,16 @@ def create_context(body: ContextCreate):
     if body.type not in VALID_TYPES:
         raise HTTPException(400, f"Invalid type. Must be: {', '.join(VALID_TYPES)}")
 
-    db = get_db()
-    entry_id = str(uuid.uuid4())[:21]
-    now = datetime.now(timezone.utc).isoformat()
+    with db_connection() as db:
+        entry_id = str(uuid.uuid4())[:21]
+        now = datetime.now(timezone.utc).isoformat()
 
-    db.execute(
-        "INSERT INTO context_branches (id, project, type, content, summary, tags, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (entry_id, body.project or "", body.type, body.content, body.summary or "",
-         json.dumps(body.tags) if body.tags else "[]", now)
-    )
-    db.commit()
-    db.close()
+        db.execute(
+            "INSERT INTO context_branches (id, project, type, content, summary, tags, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (entry_id, body.project or "", body.type, body.content, body.summary or "",
+             json.dumps(body.tags) if body.tags else "[]", now)
+        )
+        db.commit()
 
     return {"id": entry_id, "type": body.type, "created": True}
 
@@ -124,10 +119,9 @@ def create_context(body: ContextCreate):
 @router.delete("/{entry_id}")
 def delete_context(entry_id: str):
     """Delete a context branch."""
-    db = get_db()
-    db.execute("DELETE FROM context_branches WHERE id = ?", (entry_id,))
-    db.commit()
-    db.close()
+    with db_connection() as db:
+        db.execute("DELETE FROM context_branches WHERE id = ?", (entry_id,))
+        db.commit()
     return {"deleted": entry_id}
 
 
@@ -143,32 +137,31 @@ class ContextUpdate(BaseModel):
 @router.patch("/{entry_id}")
 def update_context(entry_id: str, body: ContextUpdate):
     """Update a context branch."""
-    db = get_db()
-    row = db.execute("SELECT id FROM context_branches WHERE id = ?", (entry_id,)).fetchone()
-    if not row:
-        db.close()
-        raise HTTPException(404, "Context branch not found")
+    with db_connection() as db:
+        row = db.execute("SELECT id FROM context_branches WHERE id = ?", (entry_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Context branch not found")
 
-    updates = []
-    params = []
+        # All update column names are hardcoded, not user-controlled
+        updates = []
+        params = []
 
-    if body.content is not None:
-        updates.append("content = ?")
-        params.append(body.content)
-    if body.summary is not None:
-        updates.append("summary = ?")
-        params.append(body.summary)
-    if body.tags is not None:
-        updates.append("tags = ?")
-        params.append(json.dumps(body.tags))
-    if body.type is not None and body.type in VALID_TYPES:
-        updates.append("type = ?")
-        params.append(body.type)
+        if body.content is not None:
+            updates.append("content = ?")
+            params.append(body.content)
+        if body.summary is not None:
+            updates.append("summary = ?")
+            params.append(body.summary)
+        if body.tags is not None:
+            updates.append("tags = ?")
+            params.append(json.dumps(body.tags))
+        if body.type is not None and body.type in VALID_TYPES:
+            updates.append("type = ?")
+            params.append(body.type)
 
-    if updates:
-        params.append(entry_id)
-        db.execute(f"UPDATE context_branches SET {', '.join(updates)} WHERE id = ?", params)
-        db.commit()
+        if updates:
+            params.append(entry_id)
+            db.execute(f"UPDATE context_branches SET {', '.join(updates)} WHERE id = ?", params)
+            db.commit()
 
-    db.close()
     return {"updated": entry_id}

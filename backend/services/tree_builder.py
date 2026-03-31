@@ -9,7 +9,7 @@ import json
 import os
 from pathlib import Path
 from datetime import datetime, timezone
-from db import get_db
+from db import db_connection
 from config import CLAUDE_DIR
 
 
@@ -22,67 +22,64 @@ def build_tree(project_path: str, repo_path: str = "") -> dict:
     - Context manager state (sessions, threads, branches)
     - Manual overrides from tree_overrides in cache.db
     """
-    db = get_db()
+    with db_connection() as db:
+        # Load manual overrides
+        overrides = {}
+        try:
+            rows = db.execute(
+                "SELECT node_id, status, note, priority FROM tree_overrides WHERE project = ?",
+                (project_path,)
+            ).fetchall()
+            overrides = {r["node_id"]: dict(r) for r in rows}
+        except Exception:
+            pass
 
-    # Load manual overrides
-    overrides = {}
-    try:
-        rows = db.execute(
-            "SELECT node_id, status, note, priority FROM tree_overrides WHERE project = ?",
+        tree = {
+            "generated": datetime.now(timezone.utc).isoformat(),
+            "project": project_path,
+            "children": [],
+        }
+
+        # ── Game branch ──
+        game = _build_game_branch(repo_path, overrides)
+        tree["children"].append(game)
+
+        # ── Encyclopedia branch ──
+        encyclopedia = _build_encyclopedia_branch(overrides)
+        tree["children"].append(encyclopedia)
+
+        # ── Context Manager branch ──
+        context = _build_context_branch(project_path, db, overrides)
+        tree["children"].append(context)
+
+        # ── Writer branch ──
+        writer = _build_writer_branch(overrides)
+        tree["children"].append(writer)
+
+        # ── Discoveries (manual nodes added by user) ──
+        discovery_rows = db.execute(
+            "SELECT node_id, status, note, priority FROM tree_overrides WHERE project = ? AND node_id LIKE 'discovery/%'",
             (project_path,)
         ).fetchall()
-        overrides = {r["node_id"]: dict(r) for r in rows}
-    except Exception:
-        pass
-
-    tree = {
-        "generated": datetime.now(timezone.utc).isoformat(),
-        "project": project_path,
-        "children": [],
-    }
-
-    # ── Game branch ──
-    game = _build_game_branch(repo_path, overrides)
-    tree["children"].append(game)
-
-    # ── Encyclopedia branch ──
-    encyclopedia = _build_encyclopedia_branch(overrides)
-    tree["children"].append(encyclopedia)
-
-    # ── Context Manager branch ──
-    context = _build_context_branch(project_path, db, overrides)
-    tree["children"].append(context)
-
-    # ── Writer branch ──
-    writer = _build_writer_branch(overrides)
-    tree["children"].append(writer)
-
-    # ── Discoveries (manual nodes added by user) ──
-    discovery_rows = db.execute(
-        "SELECT node_id, status, note, priority FROM tree_overrides WHERE project = ? AND node_id LIKE 'discovery/%'",
-        (project_path,)
-    ).fetchall()
-    if discovery_rows:
-        discoveries = {
-            "id": "discoveries",
-            "label": "Discoveries",
-            "type": "branch",
-            "status": "active",
-            "children": [
-                {
-                    "id": r["node_id"],
-                    "label": r["note"] or r["node_id"].split("/")[-1],
-                    "type": "leaf",
-                    "status": r["status"] or "noted",
-                    "priority": r["priority"] or 0,
-                    "note": r["note"] or "",
-                }
-                for r in discovery_rows
-            ],
-        }
-        tree["children"].append(discoveries)
-
-    db.close()
+        if discovery_rows:
+            discoveries = {
+                "id": "discoveries",
+                "label": "Discoveries",
+                "type": "branch",
+                "status": "active",
+                "children": [
+                    {
+                        "id": r["node_id"],
+                        "label": r["note"] or r["node_id"].split("/")[-1],
+                        "type": "leaf",
+                        "status": r["status"] or "noted",
+                        "priority": r["priority"] or 0,
+                        "note": r["note"] or "",
+                    }
+                    for r in discovery_rows
+                ],
+            }
+            tree["children"].append(discoveries)
 
     # Compute summary stats
     tree["stats"] = _compute_stats(tree)

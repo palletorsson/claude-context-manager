@@ -149,6 +149,9 @@ def discover_projects() -> list[dict]:
 def list_session_files(encoded_path: str) -> list[Path]:
     """List all JSONL session files for a project, newest first."""
     project_dir = PROJECTS_DIR / encoded_path
+    # Defense in depth: verify resolved path stays within PROJECTS_DIR
+    if not str(project_dir.resolve()).startswith(str(PROJECTS_DIR.resolve())):
+        return []
     if not project_dir.exists():
         return []
     files = list(project_dir.glob("*.jsonl"))
@@ -159,6 +162,9 @@ def list_session_files(encoded_path: str) -> list[Path]:
 def list_memory_files(encoded_path: str) -> list[dict]:
     """List all memory files for a project."""
     memory_dir = PROJECTS_DIR / encoded_path / "memory"
+    # Defense in depth: verify resolved path stays within PROJECTS_DIR
+    if not str(memory_dir.resolve()).startswith(str(PROJECTS_DIR.resolve())):
+        return []
     if not memory_dir.exists():
         return []
 

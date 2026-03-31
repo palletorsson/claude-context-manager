@@ -10,7 +10,7 @@ import json
 import math
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
-from db import get_db
+from db import db_connection
 
 # Common words to ignore
 STOP_WORDS = {
@@ -79,17 +79,15 @@ def extract_topics_from_sessions(project_path: str) -> list[dict]:
     - suggested_title: a suggested thread title
     - importance: weighted by session importance scores
     """
-    db = get_db()
-
-    # Get all non-archived, non-minor sessions
-    rows = db.execute("""
-        SELECT session_id, first_message, last_message, importance, category,
-               message_count, custom_title, started_at
-        FROM sessions
-        WHERE project_path = ? AND archived = 0 AND category != 'minor'
-        ORDER BY started_at DESC
-    """, (project_path,)).fetchall()
-    db.close()
+    with db_connection() as db:
+        # Get all non-archived, non-minor sessions
+        rows = db.execute("""
+            SELECT session_id, first_message, last_message, importance, category,
+                   message_count, custom_title, started_at
+            FROM sessions
+            WHERE project_path = ? AND archived = 0 AND category != 'minor'
+            ORDER BY started_at DESC
+        """, (project_path,)).fetchall()
 
     if not rows:
         return []

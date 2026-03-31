@@ -1,6 +1,7 @@
 """SQLite cache database for session index and context branches."""
 
 import sqlite3
+from contextlib import contextmanager
 from config import CACHE_DB, DATA_DIR
 
 
@@ -11,6 +12,16 @@ def get_db() -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
+
+
+@contextmanager
+def db_connection():
+    """Context manager that guarantees connection cleanup on exceptions."""
+    conn = get_db()
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def init_db():
