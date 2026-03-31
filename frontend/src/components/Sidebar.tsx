@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, MessageSquare, FileText, Zap, GitBranch } from "lucide-react";
+import { LayoutDashboard, MessageSquare, FileText, Zap, GitBranch, Network } from "lucide-react";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/tree", label: "Working Tree", icon: Network },
   { href: "/sessions", label: "Sessions", icon: MessageSquare },
   { href: "/memory", label: "Memory", icon: FileText },
   { href: "/context", label: "Context", icon: Zap },

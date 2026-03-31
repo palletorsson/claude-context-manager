@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config import CORS_ORIGINS, validate_config
 from db import init_db
-from routers import projects, sessions, memory, context, clone, dashboard, threads
+from routers import projects, sessions, memory, context, clone, dashboard, threads, tree
 
 app = FastAPI(
     title="Claude Context Manager",
@@ -28,6 +28,7 @@ app.include_router(context.router)
 app.include_router(clone.router)
 app.include_router(dashboard.router)
 app.include_router(threads.router)
+app.include_router(tree.router)
 
 
 @app.on_event("startup")
