@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { FolderOpen, MessageSquare, FileText, Zap, Clock, GitBranch, Star } from "lucide-react";
+import { FolderOpen, MessageSquare, FileText, Zap, Clock, GitBranch, Star, Sparkles, Plus } from "lucide-react";
 
 interface Project {
   encoded_path: string;
@@ -143,6 +143,15 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Suggested Threads */}
+      <div className="mb-8">
+        <h2 className="text-lg font-semibold text-zinc-200 mb-3 flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-pink-400" />
+          Suggested Meta-Threads
+        </h2>
+        <SuggestedThreads />
+      </div>
+
       {/* Starred Sessions */}
       <div className="mb-8">
         <h2 className="text-lg font-semibold text-zinc-200 mb-3 flex items-center gap-2">
@@ -178,6 +187,81 @@ export default function DashboardPage() {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function SuggestedThreads() {
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [creating, setCreating] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/projects").then((r) => r.json()).then((d) => {
+      const main = (d.projects || []).sort((a: any, b: any) => b.session_count - a.session_count)[0];
+      if (main) {
+        fetch(`/api/threads/suggest?project=${main.encoded_path}&min_sessions=2`)
+          .then((r) => r.json())
+          .then((d) => setSuggestions(
+            (d.suggestions || [])
+              .filter((s: any) => s.session_count <= 50 && s.session_count >= 2)
+              .slice(0, 8)
+          ))
+          .catch(() => {});
+      }
+    });
+  }, []);
+
+  const createThread = async (suggestion: any, project: string) => {
+    setCreating(suggestion.topic);
+    const projects = await fetch("/api/projects").then((r) => r.json());
+    const main = projects.projects?.sort((a: any, b: any) => b.session_count - a.session_count)[0];
+    if (!main) return;
+
+    await fetch(`/api/threads/create-from-suggestion?project=${main.encoded_path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(suggestion),
+    });
+    setCreating(null);
+    setSuggestions((prev) => prev.filter((s) => s.topic !== suggestion.topic));
+  };
+
+  if (suggestions.length === 0) {
+    return <p className="text-zinc-600 text-sm">Analyzing sessions for recurring topics...</p>;
+  }
+
+  return (
+    <div className="grid sm:grid-cols-2 gap-2">
+      {suggestions.map((s: any) => (
+        <div
+          key={s.topic}
+          className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 hover:border-pink-800/40 transition-colors"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-pink-400 text-xs font-bold">{s.session_count} sessions</span>
+                <span className="text-zinc-600 text-[10px]">{s.total_messages} msgs</span>
+                <span className="text-zinc-700 text-[10px]">{s.date_range?.first} — {s.date_range?.last}</span>
+              </div>
+              <p className="text-zinc-200 text-sm font-medium">{s.suggested_title}</p>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {s.keywords.slice(0, 4).map((kw: string) => (
+                  <span key={kw} className="text-[10px] bg-zinc-800 text-zinc-500 px-1.5 py-0.5 rounded">{kw}</span>
+                ))}
+              </div>
+            </div>
+            <button
+              onClick={() => createThread(s, "")}
+              disabled={creating === s.topic}
+              className="flex-shrink-0 p-1.5 rounded bg-pink-900/30 text-pink-400 hover:bg-pink-800/40 transition-colors disabled:opacity-40"
+              title="Create thread from this suggestion"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
