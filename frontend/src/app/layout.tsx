@@ -13,10 +13,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
-      <body className="bg-zinc-950 text-zinc-300 min-h-screen flex">
+    <html lang="en">
+      <body className="bg-white text-[#1f2328] min-h-screen flex" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif' }}>
         <Sidebar />
-        <main className="flex-1 ml-56 p-6">{children}</main>
+        <main className="flex-1 ml-56 p-6 max-w-[1280px]">{children}</main>
       </body>
     </html>
   );

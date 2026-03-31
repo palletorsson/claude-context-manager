@@ -4,136 +4,89 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { FolderOpen, MessageSquare, FileText, Zap, Clock, GitBranch, Star, Sparkles, Plus } from "lucide-react";
 
-interface Project {
-  encoded_path: string;
-  display_name: string;
-  session_count: number;
-  memory_count: number;
-  last_activity: string | null;
-}
-
-interface Session {
-  session_id: string;
-  project_path: string;
-  first_message: string;
-  started_at: string;
-  message_count: number;
-  model: string;
-}
-
-interface Thread {
-  project: string;
-  project_path: string;
-  filename: string;
-  status: string;
-  summary: string;
-}
-
-interface Dashboard {
-  projects: Project[];
-  recent_sessions: Session[];
-  total_sessions: number;
-  active_threads: Thread[];
-  total_memory_files: number;
-}
+interface Project { encoded_path: string; display_name: string; session_count: number; memory_count: number; last_activity: string | null; }
+interface Session { session_id: string; project_path: string; first_message: string; started_at: string; message_count: number; model: string; custom_title?: string; importance?: number; category?: string; rating?: number; starred?: number; }
+interface Thread { project: string; project_path: string; filename: string; status: string; summary: string; }
+interface Dashboard { projects: Project[]; recent_sessions: Session[]; total_sessions: number; active_threads: Thread[]; total_memory_files: number; }
 
 export default function DashboardPage() {
   const [data, setData] = useState<Dashboard | null>(null);
   const [contextStats, setContextStats] = useState<Record<string, number>>({});
+  const [error, setError] = useState(false);
 
   useEffect(() => {
-    fetch("/api/dashboard").then((r) => r.json()).then(setData);
-    fetch("/api/context/stats").then((r) => r.json()).then((d) => setContextStats(d.stats || {}));
+    Promise.all([
+      fetch("/api/dashboard").then((r) => r.json()),
+      fetch("/api/context/stats").then((r) => r.json()),
+    ])
+      .then(([d, cs]) => { setData(d); setContextStats(cs.stats || {}); })
+      .catch(() => setError(true));
   }, []);
 
-  if (!data) {
-    return <div className="animate-pulse text-zinc-500 p-8">Loading dashboard...</div>;
-  }
+  if (error) return <div className="p-8 text-[var(--color-danger)]">Could not connect to backend. Run: <code className="bg-[var(--color-bg-subtle)] px-1 rounded">cd backend && uvicorn main:app --port 8000</code></div>;
+  if (!data) return <div className="p-8 text-[var(--color-fg-subtle)]">Loading...</div>;
 
   const totalContext = Object.values(contextStats).reduce((a, b) => a + b, 0);
 
   return (
-    <div className="max-w-5xl">
-      <h1 className="text-2xl font-bold text-zinc-100 mb-6">Dashboard</h1>
+    <div>
+      <h1 className="text-2xl font-semibold text-[var(--color-fg-default)] mb-5">Dashboard</h1>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-        <Stat icon={FolderOpen} value={data.projects.length} label="Projects" color="text-blue-400" />
-        <Stat icon={MessageSquare} value={data.total_sessions} label="Sessions Indexed" color="text-violet-400" />
-        <Stat icon={FileText} value={data.total_memory_files} label="Memory Files" color="text-green-400" />
-        <Stat icon={Zap} value={totalContext} label="Context Branches" color="text-amber-400" />
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <Stat icon={FolderOpen} value={data.projects.length} label="Projects" />
+        <Stat icon={MessageSquare} value={data.total_sessions} label="Sessions Indexed" />
+        <Stat icon={FileText} value={data.total_memory_files} label="Memory Files" />
+        <Stat icon={Zap} value={totalContext} label="Context Branches" />
       </div>
 
-      {/* Two columns: Projects + Active Threads */}
-      <div className="grid md:grid-cols-2 gap-6 mb-8">
+      <div className="grid md:grid-cols-2 gap-6 mb-6">
         {/* Projects */}
         <div>
-          <h2 className="text-lg font-semibold text-zinc-200 mb-3">Projects</h2>
-          <div className="space-y-2">
-            {data.projects
-              .filter((p) => p.session_count > 0)
-              .sort((a, b) => b.session_count - a.session_count)
-              .map((p) => (
-                <Link
-                  key={p.encoded_path}
-                  href={`/sessions?project=${p.encoded_path}`}
-                  className="block bg-zinc-900 border border-zinc-800 rounded-lg p-3 hover:border-zinc-600 transition-colors"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-zinc-200 font-medium text-sm">{p.display_name}</span>
-                    <span className="text-zinc-600 text-xs">{p.session_count} sessions</span>
-                  </div>
-                  {p.memory_count > 0 && (
-                    <span className="text-zinc-500 text-xs">{p.memory_count} memory files</span>
-                  )}
-                </Link>
-              ))}
+          <h2 className="text-sm font-semibold text-[var(--color-fg-default)] mb-2 uppercase tracking-wide">Projects</h2>
+          <div className="border border-[var(--color-border)] rounded-md overflow-hidden">
+            {data.projects.filter((p) => p.session_count > 0).sort((a, b) => b.session_count - a.session_count).map((p, i) => (
+              <Link key={p.encoded_path} href={`/sessions?project=${p.encoded_path}`}
+                className={`flex items-center justify-between px-3 py-2.5 hover:bg-[var(--color-bg-subtle)] transition-colors ${i > 0 ? "border-t border-[var(--color-border-muted)]" : ""}`}>
+                <div>
+                  <span className="text-sm font-medium text-[var(--color-accent)]">{p.display_name}</span>
+                  {p.memory_count > 0 && <span className="text-xs text-[var(--color-fg-subtle)] ml-2">{p.memory_count} memory files</span>}
+                </div>
+                <span className="text-xs text-[var(--color-fg-subtle)] bg-[var(--color-bg-subtle)] px-2 py-0.5 rounded-full">{p.session_count}</span>
+              </Link>
+            ))}
           </div>
         </div>
 
-        {/* Active Threads */}
+        {/* Threads + Context */}
         <div>
-          <h2 className="text-lg font-semibold text-zinc-200 mb-3 flex items-center gap-2">
-            <GitBranch className="w-4 h-4 text-violet-400" />
-            Active Threads
+          <h2 className="text-sm font-semibold text-[var(--color-fg-default)] mb-2 uppercase tracking-wide flex items-center gap-1.5">
+            <GitBranch className="w-3.5 h-3.5" /> Active Threads
           </h2>
           {data.active_threads.length === 0 ? (
-            <p className="text-zinc-600 text-sm">No active threads</p>
+            <p className="text-sm text-[var(--color-fg-subtle)]">No active threads</p>
           ) : (
-            <div className="space-y-2">
-              {data.active_threads.map((t) => (
-                <Link
-                  key={t.filename}
-                  href={`/memory?project=${t.project_path}`}
-                  className="block bg-zinc-900 border border-zinc-800 rounded-lg p-3 hover:border-zinc-600 transition-colors"
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-xs px-1.5 py-0.5 rounded ${
-                      t.status === "active" ? "bg-green-900/40 text-green-400" :
-                      t.status === "paused" ? "bg-amber-900/40 text-amber-400" :
-                      "bg-zinc-800 text-zinc-500"
-                    }`}>
-                      {t.status}
-                    </span>
-                    <span className="text-zinc-200 text-sm font-medium">{t.filename.replace("thread_", "").replace(".md", "")}</span>
+            <div className="border border-[var(--color-border)] rounded-md overflow-hidden">
+              {data.active_threads.map((t, i) => (
+                <Link key={t.filename} href={`/memory?project=${t.project_path}`}
+                  className={`block px-3 py-2.5 hover:bg-[var(--color-bg-subtle)] ${i > 0 ? "border-t border-[var(--color-border-muted)]" : ""}`}>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <StatusBadge status={t.status} />
+                    <span className="text-sm font-medium">{t.filename.replace("thread_", "").replace(".md", "")}</span>
                   </div>
-                  <p className="text-zinc-500 text-xs line-clamp-2">{t.summary}</p>
+                  <p className="text-xs text-[var(--color-fg-subtle)] truncate">{t.summary}</p>
                 </Link>
               ))}
             </div>
           )}
 
-          {/* Context branch summary */}
           {totalContext > 0 && (
             <div className="mt-4">
-              <h3 className="text-sm font-semibold text-zinc-300 mb-2">Context Branches</h3>
-              <div className="flex flex-wrap gap-2">
+              <h3 className="text-xs font-semibold text-[var(--color-fg-muted)] mb-1.5 uppercase tracking-wide">Context Branches</h3>
+              <div className="flex flex-wrap gap-1.5">
                 {Object.entries(contextStats).map(([type, count]) => (
-                  <Link
-                    key={type}
-                    href={`/context?type=${type}`}
-                    className="text-xs bg-zinc-800 px-2 py-1 rounded-md text-zinc-400 hover:text-zinc-200 transition-colors"
-                  >
+                  <Link key={type} href={`/context?type=${type}`}
+                    className="text-xs border border-[var(--color-border)] px-2 py-1 rounded-full text-[var(--color-fg-muted)] hover:text-[var(--color-accent)] hover:border-[var(--color-accent)] transition-colors">
                     {type}: {count}
                   </Link>
                 ))}
@@ -144,43 +97,30 @@ export default function DashboardPage() {
       </div>
 
       {/* Suggested Threads */}
-      <div className="mb-8">
-        <h2 className="text-lg font-semibold text-zinc-200 mb-3 flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-pink-400" />
-          Suggested Meta-Threads
-        </h2>
-        <SuggestedThreads />
-      </div>
+      <SuggestedThreads />
 
-      {/* Starred Sessions */}
-      <div className="mb-8">
-        <h2 className="text-lg font-semibold text-zinc-200 mb-3 flex items-center gap-2">
-          <Star className="w-4 h-4 text-amber-400" />
-          Starred Sessions
+      {/* Starred */}
+      <div className="mt-6 mb-6">
+        <h2 className="text-sm font-semibold text-[var(--color-fg-default)] mb-2 uppercase tracking-wide flex items-center gap-1.5">
+          <Star className="w-3.5 h-3.5 text-[var(--color-attention)]" /> Starred Sessions
         </h2>
         <StarredSessions />
       </div>
 
-      {/* Recent Sessions */}
+      {/* Recent */}
       <div>
-        <h2 className="text-lg font-semibold text-zinc-200 mb-3 flex items-center gap-2">
-          <Clock className="w-4 h-4 text-cyan-400" />
-          Recent Sessions
+        <h2 className="text-sm font-semibold text-[var(--color-fg-default)] mb-2 uppercase tracking-wide flex items-center gap-1.5">
+          <Clock className="w-3.5 h-3.5" /> Recent Sessions
         </h2>
-        <div className="space-y-1.5">
-          {data.recent_sessions.map((s) => (
-            <Link
-              key={s.session_id}
-              href={`/sessions/${s.session_id}`}
-              className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 hover:border-zinc-600 transition-colors"
-            >
-              <span className="text-zinc-600 text-xs font-mono w-20 flex-shrink-0">
+        <div className="border border-[var(--color-border)] rounded-md overflow-hidden">
+          {data.recent_sessions.map((s, i) => (
+            <Link key={s.session_id} href={`/sessions/${s.session_id}`}
+              className={`flex items-center gap-3 px-3 py-2 hover:bg-[var(--color-bg-subtle)] transition-colors ${i > 0 ? "border-t border-[var(--color-border-muted)]" : ""}`}>
+              <span className="text-xs text-[var(--color-fg-subtle)] font-mono w-20 shrink-0">
                 {s.started_at ? new Date(s.started_at).toLocaleDateString() : "?"}
               </span>
-              <span className="text-zinc-500 text-xs w-12 flex-shrink-0 text-right">
-                {s.message_count} msg
-              </span>
-              <span className="text-zinc-300 text-sm truncate flex-1">
+              <span className="text-xs text-[var(--color-fg-subtle)] w-12 shrink-0 text-right">{s.message_count} msg</span>
+              <span className="text-sm text-[var(--color-fg-default)] truncate flex-1">
                 {(s as any).custom_title || s.first_message?.slice(0, 100) || "—"}
               </span>
             </Link>
@@ -193,7 +133,6 @@ export default function DashboardPage() {
 
 function SuggestedThreads() {
   const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [creating, setCreating] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/projects").then((r) => r.json()).then((d) => {
@@ -201,67 +140,42 @@ function SuggestedThreads() {
       if (main) {
         fetch(`/api/threads/suggest?project=${main.encoded_path}&min_sessions=2`)
           .then((r) => r.json())
-          .then((d) => setSuggestions(
-            (d.suggestions || [])
-              .filter((s: any) => s.session_count <= 50 && s.session_count >= 2)
-              .slice(0, 8)
-          ))
+          .then((d) => setSuggestions((d.suggestions || []).filter((s: any) => s.session_count <= 50 && s.session_count >= 2).slice(0, 6)))
           .catch(() => {});
       }
     });
   }, []);
 
-  const createThread = async (suggestion: any, project: string) => {
-    setCreating(suggestion.topic);
-    const projects = await fetch("/api/projects").then((r) => r.json());
-    const main = projects.projects?.sort((a: any, b: any) => b.session_count - a.session_count)[0];
-    if (!main) return;
-
-    await fetch(`/api/threads/create-from-suggestion?project=${main.encoded_path}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(suggestion),
-    });
-    setCreating(null);
-    setSuggestions((prev) => prev.filter((s) => s.topic !== suggestion.topic));
-  };
-
-  if (suggestions.length === 0) {
-    return <p className="text-zinc-600 text-sm">Analyzing sessions for recurring topics...</p>;
-  }
+  if (suggestions.length === 0) return null;
 
   return (
-    <div className="grid sm:grid-cols-2 gap-2">
-      {suggestions.map((s: any) => (
-        <div
-          key={s.topic}
-          className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 hover:border-pink-800/40 transition-colors"
-        >
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-pink-400 text-xs font-bold">{s.session_count} sessions</span>
-                <span className="text-zinc-600 text-[10px]">{s.total_messages} msgs</span>
-                <span className="text-zinc-700 text-[10px]">{s.date_range?.first} — {s.date_range?.last}</span>
+    <div>
+      <h2 className="text-sm font-semibold text-[var(--color-fg-default)] mb-2 uppercase tracking-wide flex items-center gap-1.5">
+        <Sparkles className="w-3.5 h-3.5 text-[var(--color-done)]" /> Suggested Meta-Threads
+      </h2>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+        {suggestions.map((s: any) => (
+          <div key={s.topic} className="border border-[var(--color-border)] rounded-md p-3 hover:border-[var(--color-done)] transition-colors">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-semibold text-[var(--color-done)]">{s.session_count} sessions</span>
+                  <span className="text-[10px] text-[var(--color-fg-subtle)]">{s.total_messages} msgs</span>
+                </div>
+                <p className="text-sm font-medium text-[var(--color-fg-default)] truncate">{s.suggested_title}</p>
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {s.keywords.slice(0, 4).map((kw: string) => (
+                    <span key={kw} className="text-[10px] bg-[var(--color-bg-subtle)] text-[var(--color-fg-subtle)] px-1.5 py-0.5 rounded-full border border-[var(--color-border-muted)]">{kw}</span>
+                  ))}
+                </div>
               </div>
-              <p className="text-zinc-200 text-sm font-medium">{s.suggested_title}</p>
-              <div className="flex flex-wrap gap-1 mt-1">
-                {s.keywords.slice(0, 4).map((kw: string) => (
-                  <span key={kw} className="text-[10px] bg-zinc-800 text-zinc-500 px-1.5 py-0.5 rounded">{kw}</span>
-                ))}
-              </div>
+              <button className="shrink-0 p-1.5 rounded-md border border-[var(--color-border)] text-[var(--color-fg-subtle)] hover:text-[var(--color-done)] hover:border-[var(--color-done)] transition-colors" title="Create thread">
+                <Plus className="w-3.5 h-3.5" />
+              </button>
             </div>
-            <button
-              onClick={() => createThread(s, "")}
-              disabled={creating === s.topic}
-              className="flex-shrink-0 p-1.5 rounded bg-pink-900/30 text-pink-400 hover:bg-pink-800/40 transition-colors disabled:opacity-40"
-              title="Create thread from this suggestion"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -270,39 +184,30 @@ function StarredSessions() {
   const [starred, setStarred] = useState<Session[]>([]);
 
   useEffect(() => {
-    // Find the main project and get starred sessions
     fetch("/api/projects").then((r) => r.json()).then((d) => {
       const main = (d.projects || []).sort((a: any, b: any) => b.session_count - a.session_count)[0];
       if (main) {
         fetch(`/api/sessions?project=${main.encoded_path}&starred=true&sort=rating&per_page=10`)
-          .then((r) => r.json())
-          .then((d) => setStarred(d.sessions || []));
+          .then((r) => r.json()).then((d) => setStarred(d.sessions || []));
       }
     });
   }, []);
 
-  if (starred.length === 0) {
-    return <p className="text-zinc-600 text-sm">No starred sessions yet. Star important sessions in the Sessions view.</p>;
-  }
+  if (starred.length === 0) return <p className="text-sm text-[var(--color-fg-subtle)]">No starred sessions yet. Star important sessions in the Sessions view.</p>;
 
   return (
-    <div className="space-y-1.5">
-      {starred.map((s: any) => (
-        <Link
-          key={s.session_id}
-          href={`/sessions/${s.session_id}`}
-          className="flex items-center gap-3 bg-zinc-900 border border-amber-800/30 rounded-lg px-3 py-2.5 hover:border-amber-700/50 transition-colors"
-        >
-          <Star className="w-4 h-4 fill-amber-400 text-amber-400 flex-shrink-0" />
+    <div className="border border-[var(--color-border)] rounded-md overflow-hidden">
+      {starred.map((s: any, i: number) => (
+        <Link key={s.session_id} href={`/sessions/${s.session_id}`}
+          className={`flex items-center gap-3 px-3 py-2 hover:bg-[#fff8c5] transition-colors ${i > 0 ? "border-t border-[var(--color-border-muted)]" : ""}`}>
+          <Star className="w-4 h-4 fill-[var(--color-attention)] text-[var(--color-attention)] shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
-              {s.rating > 0 && <span className="text-amber-500 text-[10px]">{"★".repeat(s.rating)}</span>}
-              <span className="text-zinc-600 text-[10px] font-mono">
-                {s.started_at ? new Date(s.started_at).toLocaleDateString() : "?"}
-              </span>
-              <span className="text-zinc-700 text-[10px]">{s.message_count} msg</span>
+              {s.rating > 0 && <span className="text-[var(--color-attention)] text-xs">{"★".repeat(s.rating)}</span>}
+              <span className="text-xs text-[var(--color-fg-subtle)] font-mono">{s.started_at ? new Date(s.started_at).toLocaleDateString() : "?"}</span>
+              <span className="text-[10px] text-[var(--color-fg-subtle)]">{s.message_count} msg</span>
             </div>
-            <p className="text-zinc-200 text-sm truncate">{s.custom_title || s.first_message?.slice(0, 100) || "—"}</p>
+            <p className="text-sm text-[var(--color-fg-default)] truncate">{s.custom_title || s.first_message?.slice(0, 100) || "—"}</p>
           </div>
         </Link>
       ))}
@@ -310,12 +215,26 @@ function StarredSessions() {
   );
 }
 
-function Stat({ icon: Icon, value, label, color }: { icon: React.ElementType; value: number; label: string; color: string }) {
+function Stat({ icon: Icon, value, label }: { icon: React.ElementType; value: number; label: string }) {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 text-center">
-      <Icon className={`w-5 h-5 mx-auto mb-1 ${color}`} />
-      <div className={`text-xl font-bold ${color}`}>{value}</div>
-      <div className="text-zinc-600 text-xs">{label}</div>
+    <div className="border border-[var(--color-border)] rounded-md p-3 text-center">
+      <Icon className="w-5 h-5 mx-auto mb-1 text-[var(--color-fg-subtle)]" />
+      <div className="text-xl font-semibold text-[var(--color-fg-default)]">{value}</div>
+      <div className="text-xs text-[var(--color-fg-subtle)]">{label}</div>
     </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const colors: Record<string, string> = {
+    active: "bg-[#dafbe1] text-[var(--color-success)] border-[#aceebb]",
+    paused: "bg-[#fff8c5] text-[var(--color-attention)] border-[#eac54f]",
+    merged: "bg-[#ddf4ff] text-[var(--color-accent)] border-[#54aeff]",
+    archived: "bg-[var(--color-bg-subtle)] text-[var(--color-fg-subtle)] border-[var(--color-border)]",
+  };
+  return (
+    <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${colors[status] || colors.active}`}>
+      {status}
+    </span>
   );
 }

@@ -1,1 +1,19 @@
 @import "tailwindcss";
+
+:root {
+  --color-border: #d1d9e0;
+  --color-border-muted: #d8dee4;
+  --color-bg-canvas: #ffffff;
+  --color-bg-subtle: #f6f8fa;
+  --color-bg-inset: #eff2f5;
+  --color-fg-default: #1f2328;
+  --color-fg-muted: #59636e;
+  --color-fg-subtle: #6e7781;
+  --color-accent: #0969da;
+  --color-accent-emphasis: #0550ae;
+  --color-success: #1a7f37;
+  --color-danger: #d1242f;
+  --color-attention: #9a6700;
+  --color-done: #8250df;
+  --color-sidebar-bg: #f6f8fa;
+}
