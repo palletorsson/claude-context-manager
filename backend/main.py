@@ -43,6 +43,12 @@ def startup():
         total_sessions = sum(p["session_count"] for p in projects)
         print(f"  Found {len(projects)} projects, {total_sessions} sessions")
 
+        # Backfill content hashes for existing sessions
+        from services.variety import backfill_content_hashes
+        backfilled = backfill_content_hashes()
+        if backfilled:
+            print(f"  Backfilled content hashes for {backfilled} sessions")
+
 
 @app.get("/api/health")
 def health():

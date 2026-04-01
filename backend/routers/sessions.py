@@ -8,6 +8,7 @@ from db import db_connection
 from config import PROJECTS_DIR
 from services.claude_fs import list_session_files
 from services.indexer import index_session, read_messages_page, read_single_message
+from services.variety import file_content_hash, extract_and_count_concepts
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -20,12 +21,25 @@ def _ensure_indexed(project_path: str, limit: int = 200):
         for f in files:
             session_id = f.stem
             row = db.execute(
-                "SELECT file_mtime FROM sessions WHERE session_id = ?",
+                "SELECT file_mtime, content_hash FROM sessions WHERE session_id = ?",
                 (session_id,)
             ).fetchone()
 
-            if row and abs(row["file_mtime"] - f.stat().st_mtime) < 1.0:
+            current_mtime = f.stat().st_mtime
+
+            # Fast path: mtime unchanged → skip
+            if row and abs(row["file_mtime"] - current_mtime) < 1.0:
                 continue
+
+            # Hash gate: if mtime changed but content identical, just update mtime
+            if row and row["content_hash"]:
+                new_hash = file_content_hash(f)
+                if new_hash == row["content_hash"]:
+                    db.execute(
+                        "UPDATE sessions SET file_mtime = ? WHERE session_id = ?",
+                        (current_mtime, session_id)
+                    )
+                    continue
 
             meta = index_session(f)
             meta["project_path"] = project_path
@@ -36,8 +50,8 @@ def _ensure_indexed(project_path: str, limit: int = 200):
                 (session_id, project_path, file_path, file_size, file_mtime,
                  message_count, user_count, assistant_count,
                  first_message, last_message, started_at, model, indexed_at,
-                 tools_used, category, importance, duration_mins)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 tools_used, category, importance, duration_mins, content_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 meta["session_id"], project_path, meta["file_path"],
                 meta["file_size"], meta["file_mtime"],
@@ -48,7 +62,15 @@ def _ensure_indexed(project_path: str, limit: int = 200):
                 meta.get("category", "standard"),
                 meta.get("importance", 0),
                 meta.get("duration_mins", 0),
+                meta.get("content_hash", ""),
             ))
+
+            # Update concept reference counts
+            extract_and_count_concepts(
+                session_id, project_path,
+                meta.get("first_message", ""),
+                meta.get("tools_used", "[]"),
+            )
 
         db.commit()
 

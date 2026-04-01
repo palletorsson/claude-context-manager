@@ -79,6 +79,12 @@ def extract_topics_from_sessions(project_path: str) -> list[dict]:
     - suggested_title: a suggested thread title
     - importance: weighted by session importance scores
     """
+    # Cache gate: skip extraction if sessions haven't changed
+    from services.variety import get_cached_topics, cache_topics
+    cached = get_cached_topics(project_path)
+    if cached is not None:
+        return cached
+
     with db_connection() as db:
         # Get all non-archived, non-minor sessions
         rows = db.execute("""
@@ -181,7 +187,12 @@ def extract_topics_from_sessions(project_path: str) -> list[dict]:
     # Sort clusters by total importance
     clusters.sort(key=lambda c: -c["total_importance"])
 
-    return clusters[:30]  # Top 30 topics
+    result = clusters[:30]  # Top 30 topics
+
+    # Cache the result for next time
+    cache_topics(project_path, result)
+
+    return result
 
 
 def _suggest_title(primary: str, related: list[str], sessions: list[dict]) -> str:

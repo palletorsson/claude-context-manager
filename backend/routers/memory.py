@@ -3,6 +3,7 @@ from pathlib import Path
 from config import PROJECTS_DIR
 from services.claude_fs import list_memory_files
 from security import safe_resolve, validate_filename, validate_project
+from services.variety import record_memory_reference
 
 router = APIRouter(prefix="/api/memory", tags=["memory"])
 
@@ -31,6 +32,8 @@ def read_file(project: str, filename: str):
     if not path.exists():
         raise HTTPException(404, f"File not found: {filename}")
     content = path.read_text(encoding="utf-8")
+    # Track reference for temperature computation
+    record_memory_reference(validate_project(project), filename)
     return {"filename": filename, "content": content, "size": len(content)}
 
 

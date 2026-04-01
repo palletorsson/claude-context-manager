@@ -1,5 +1,6 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from services.claude_fs import discover_projects, list_memory_files
+from services.variety import get_temperature_summary, get_top_concepts
 from db import db_connection
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -36,4 +37,16 @@ def dashboard():
         "total_sessions": total_sessions,
         "active_threads": active_threads,
         "total_memory_files": sum(p["memory_count"] for p in projects),
+        "temperature_summary": get_temperature_summary(),
+    }
+
+
+@router.get("/variety")
+def variety_stats(project: str = Query("", description="Filter by project (empty = all)")):
+    """Variety engineering stats — temperature distribution and top concepts."""
+    return {
+        "temperature_distribution": get_temperature_summary(project),
+        "top_concepts": get_top_concepts(project, limit=20),
+        "top_keywords": get_top_concepts(project, concept_type="keyword", limit=15),
+        "top_tools": get_top_concepts(project, concept_type="tool", limit=10),
     }

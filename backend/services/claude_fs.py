@@ -109,6 +109,14 @@ def discover_projects() -> list[dict]:
     if not PROJECTS_DIR.exists():
         return []
 
+    # Cache by directory mtime
+    try:
+        current_mtime = PROJECTS_DIR.stat().st_mtime
+        if abs(current_mtime - _projects_cache["mtime"]) < 0.5 and _projects_cache["data"]:
+            return _projects_cache["data"]
+    except OSError:
+        pass
+
     projects = []
     for entry in sorted(PROJECTS_DIR.iterdir()):
         if not entry.is_dir():
@@ -143,6 +151,13 @@ def discover_projects() -> list[dict]:
             "last_activity": last_activity,
         })
 
+    # Update cache
+    try:
+        _projects_cache["mtime"] = PROJECTS_DIR.stat().st_mtime
+        _projects_cache["data"] = projects
+    except OSError:
+        pass
+
     return projects
 
 
@@ -160,7 +175,9 @@ def list_session_files(encoded_path: str) -> list[Path]:
 
 
 def list_memory_files(encoded_path: str) -> list[dict]:
-    """List all memory files for a project."""
+    """List all memory files for a project, with temperature metadata."""
+    from services.variety import file_content_hash, get_cached_memory_meta, upsert_memory_meta
+
     memory_dir = PROJECTS_DIR / encoded_path / "memory"
     # Defense in depth: verify resolved path stays within PROJECTS_DIR
     if not str(memory_dir.resolve()).startswith(str(PROJECTS_DIR.resolve())):
@@ -171,19 +188,35 @@ def list_memory_files(encoded_path: str) -> list[dict]:
     files = []
     for f in sorted(memory_dir.glob("*.md")):
         stat = f.stat()
+        modified_at = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat()
 
-        # Read first non-heading lines for summary
+        # Check cached metadata by content hash
+        current_hash = file_content_hash(f)
+        cached = get_cached_memory_meta(encoded_path, f.name, current_hash)
+
+        if cached:
+            files.append({
+                "filename": f.name,
+                "file_path": str(f),
+                "file_size": stat.st_size,
+                "modified_at": modified_at,
+                "status": cached["status"],
+                "summary": cached["summary"],
+                "temperature": cached["temperature"],
+                "temperature_score": cached["temperature_score"],
+            })
+            continue
+
+        # Cache miss — parse file content
         summary = ""
         status = "active"
         try:
             content = f.read_text(encoding="utf-8")
-            # Extract summary from first content lines
             for line in content.split("\n"):
                 line = line.strip()
                 if line and not line.startswith("#") and not line.startswith("---"):
                     summary = line[:200]
                     break
-            # Detect status
             upper = content.upper()
             if "PAUSED" in upper:
                 status = "paused"
@@ -194,15 +227,42 @@ def list_memory_files(encoded_path: str) -> list[dict]:
         except Exception:
             pass
 
+        # Cache the metadata
+        upsert_memory_meta(
+            project_path=encoded_path,
+            filename=f.name,
+            file_hash=current_hash,
+            file_size=stat.st_size,
+            modified_at=modified_at,
+            status=status,
+            summary=summary,
+        )
+
+        # Re-read cached meta to get computed temperature
+        cached = get_cached_memory_meta(encoded_path, f.name, current_hash)
+        temperature = cached["temperature"] if cached else "warm"
+        temperature_score = cached["temperature_score"] if cached else 50.0
+
         files.append({
             "filename": f.name,
             "file_path": str(f),
             "file_size": stat.st_size,
-            "modified_at": datetime.fromtimestamp(
-                stat.st_mtime, tz=timezone.utc
-            ).isoformat(),
+            "modified_at": modified_at,
             "status": status,
             "summary": summary,
+            "temperature": temperature,
+            "temperature_score": temperature_score,
         })
 
     return files
+
+
+# ── Projects discovery cache ──────────────────────────────────
+
+_projects_cache: dict = {"mtime": 0.0, "data": []}
+
+
+def _clear_projects_cache():
+    """Clear the projects discovery cache. Used in tests."""
+    _projects_cache["mtime"] = 0.0
+    _projects_cache["data"] = []

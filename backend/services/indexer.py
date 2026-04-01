@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional
+from services.variety import file_content_hash
 
 
 def index_session(jsonl_path: Path) -> dict:
@@ -113,9 +114,12 @@ def index_session(jsonl_path: Path) -> dict:
         except Exception:
             pass
 
+    content_hash = file_content_hash(jsonl_path)
+
     return {
         "session_id": session_id,
         "file_path": str(jsonl_path),
+        "content_hash": content_hash,
         "file_size": stat.st_size,
         "file_mtime": stat.st_mtime,
         "message_count": total_msgs,

@@ -47,6 +47,9 @@ def mock_projects_dir(tmp_path, monkeypatch):
     import services.claude_fs as claude_fs
     import security as sec
 
+    # Clear projects discovery cache to prevent leaks between tests
+    claude_fs._clear_projects_cache()
+
     projects_dir = tmp_path / "projects"
     projects_dir.mkdir()
 
