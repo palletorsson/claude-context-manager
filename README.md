@@ -1,10 +1,20 @@
 # Claude Context Manager
 
-Browse, star, clone, and manage your Claude Code session history. Stop losing context between sessions.
+> Browse, star, clone, and manage your Claude Code session history. Stop losing context between sessions.
+
+**For heavy Claude Code users** with many sessions across multiple projects. Not aimed at casual one-off chat users.
+
+---
+
+*Dashboard -- projects, active threads, meta-thread suggestions, and context branches at a glance.*
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
+*Session browser -- filter by category, search, sort by importance, star and archive.*
+
 ![Session browser](docs/screenshots/sessions.png)
+
+---
 
 ## The Problem
 
