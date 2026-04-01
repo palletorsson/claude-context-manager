@@ -1,0 +1,48 @@
+========================================================================
+ABLATION BENCHMARK RESULTS
+========================================================================
+
+## Ablation 1: Gate Tiers (N=20 files, 880.4 MB)
+
+  Strategy                         Total (ms)   Median/file (ms)
+  ------------------------------ ------------ ------------------
+  Mtime + hash gate                     712.9              16.74
+  Mtime-only gate                      4753.1             114.02
+
+  Hash tier savings (when content unchanged): 85.0%
+  Cost of hash check vs full parse: 712.9 ms vs 4753.1 ms
+
+  Interpretation: When mtime differs but content is unchanged,
+  the hash tier avoids full re-indexing at ~15% of the cost.
+
+## Ablation 2: Clone Extraction Yield (N=10 sessions)
+
+  Extraction level                            Total  Per session
+  ---------------------------------------- -------- ------------
+  (a) First msg + last summary (baseline)        20          2.0
+  (b) + decisions + questions                   704         70.4
+  (c) + turning points (full system)            886         88.6
+
+  Turning points breakdown:
+    Pivots (user redirections):      32 (3.2 per session)
+    Breakthroughs (discoveries):     150 (15.0 per session)
+    Total turning points:            182 (18.2 per session)
+
+  Incremental extraction yield:
+    Decisions+questions add:         +684 items (+3420% over baseline)
+    Turning points add:              +182 items (+26% over decisions)
+    Full system vs baseline:         +866 items (+4330% total)
+
+  Per-session detail:
+  Session                    Msgs   Dec     Q   Piv   Brk    TP
+  ------------------------- ----- ----- ----- ----- ----- -----
+  12c4a6be-d651-49ff-9ec9-a  8509    26   100    14    28    42
+  531f69cf-2ddc-41b2-9bdb-3  6070    11    80     5    25    30
+  63f3a751-edea-43e4-9caa-6  4795    18    53     3    11    14
+  369f8742-09bd-440c-989f-d  5271    15   166     0    30    30
+  8a9794dc-fa24-4440-a694-c  2384     7    34     2    17    19
+  3b9e940a-f437-4534-8712-a  3071     5    32     2     9    11
+  fe263d50-1eac-4faf-8c2a-4  2688     6    12     4     6    10
+  539a0dfa-6185-4ea7-b724-a  2503     0    11     2     6     8
+  91073000-c580-46d5-8fd1-9   943     3    61     0     3     3
+  c5c4c59b-9852-43e3-acf6-0  2148     8    36     0    15    15

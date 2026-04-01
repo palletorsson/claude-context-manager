@@ -59,6 +59,7 @@ def clone_session(body: CloneRequest):
             "decisions": len(context["decisions"]),
             "files_touched": len(context["files"]),
             "questions": len(context["questions"]),
+            "turning_points": len(context["turning_points"]),
         },
     }
 
@@ -68,8 +69,24 @@ def _extract_context(jsonl_path: Path) -> dict:
     decisions = []
     files = set()
     questions = []
+    turning_points = []
     last_summary = ""
     user_messages = []
+    msg_index = 0
+    prev_assistant_text = ""
+
+    # Markers for mid-session pivots, breakthroughs, and root-cause discoveries
+    pivot_markers = [
+        "actually,", "wait,", "scratch that", "instead,", "let's change",
+        "on second thought", "different approach", "won't work", "doesn't work",
+        "let me try", "better approach", "I was wrong",
+    ]
+    breakthrough_markers = [
+        "the issue was", "the problem was", "root cause", "found it",
+        "that fixed it", "now it works", "the fix is", "turns out",
+        "the real issue", "the bug was", "aha,", "the key insight",
+        "mystery solved", "that explains",
+    ]
 
     try:
         with open(jsonl_path, "r", encoding="utf-8") as f:
@@ -109,15 +126,44 @@ def _extract_context(jsonl_path: Path) -> dict:
 
                 if event_type == "user":
                     user_messages.append(text[:300])
+                    msg_index += 1
+
+                    # Detect user-initiated pivots (redirections mid-session)
+                    if msg_index > 2:
+                        text_lower = text.lower()
+                        for marker in pivot_markers:
+                            if marker in text_lower:
+                                turning_points.append({
+                                    "type": "pivot",
+                                    "position": msg_index,
+                                    "text": text.strip()[:200],
+                                })
+                                break
 
                 elif event_type == "assistant" and text:
+                    msg_index += 1
+                    text_lower = text.lower()
+
                     # Look for decisions
                     for marker in ["decided", "chose", "approach:", "decision:", "going with", "the plan is"]:
-                        if marker.lower() in text.lower():
+                        if marker in text_lower:
                             # Extract the sentence containing the marker
                             for sentence in text.split(". "):
-                                if marker.lower() in sentence.lower():
+                                if marker in sentence.lower():
                                     decisions.append(sentence.strip()[:200])
+                                    break
+                            break
+
+                    # Look for breakthroughs and root-cause discoveries
+                    for marker in breakthrough_markers:
+                        if marker in text_lower:
+                            for sentence in text.split(". "):
+                                if marker in sentence.lower():
+                                    turning_points.append({
+                                        "type": "breakthrough",
+                                        "position": msg_index,
+                                        "text": sentence.strip()[:200],
+                                    })
                                     break
                             break
 
@@ -131,13 +177,25 @@ def _extract_context(jsonl_path: Path) -> dict:
                     if len(text) > 100:
                         last_summary = text[:500]
 
+                    prev_assistant_text = text
+
     except Exception as e:
         print(f"Error extracting context: {e}")
+
+    # Deduplicate turning points by text similarity
+    seen_tp = set()
+    unique_tp = []
+    for tp in turning_points:
+        key = tp["text"][:80].lower()
+        if key not in seen_tp:
+            seen_tp.add(key)
+            unique_tp.append(tp)
 
     return {
         "decisions": decisions[:20],
         "files": sorted(files)[:30],
         "questions": questions[:15],
+        "turning_points": unique_tp[:15],
         "last_summary": last_summary,
         "user_messages": user_messages[:5],
     }
@@ -163,6 +221,14 @@ def _generate_thread(name: str, session: dict, context: dict) -> str:
         lines.append("## What This Session Was About")
         for msg in context["user_messages"][:3]:
             lines.append(f"- {msg}")
+        lines.append("")
+
+    # Turning points (pivots and breakthroughs from mid-session)
+    if context["turning_points"]:
+        lines.append("## Turning Points")
+        for tp in context["turning_points"]:
+            label = "\U0001f504" if tp["type"] == "pivot" else "\U0001f4a1"
+            lines.append(f"- {label} [{tp['type']}] {tp['text']}")
         lines.append("")
 
     # Decisions

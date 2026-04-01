@@ -1,0 +1,49 @@
+========================================================================
+BENCHMARK RESULTS: Claude Context Manager v0.3.0
+========================================================================
+
+## Dataset
+  Projects:       13
+  Session files:  2434
+  Total size:     1015.3 MB
+  Smallest file:  1.5 KB
+  Largest file:   192.33 MB
+  Median file:    39.1 KB
+
+## 1. Session Indexing (N=20 files, 879.1 MB)
+  Full JSONL parse (total):    4292.4 ms
+  Hash-only check (total):     717.7 ms
+  Savings (hash vs parse):     83.3%
+  Per-file parse (median):     101.56 ms
+  Per-file hash (median):      15.52 ms
+
+## 2. Topic Clustering (N=4 projects)
+  Full extraction (median):    3.5 ms
+  Cached lookup (median):      2.691 ms
+  Speedup:                     1x
+  Savings:                     22.7%
+
+## 3. Memory Metadata (N=14 files)
+  Full read+parse (median):    0.171 ms
+  Hash check (median):         0.088 ms
+  Full read+parse (total):     2.3 ms
+  Hash check (total):          1.2 ms
+
+## 4. Projects Discovery
+  Full directory scan:         0.06 ms
+  Mtime check (cached):        0.0258 ms
+  Speedup:                     2x
+
+## 5. Cache Hit Rates (warm cache, N=2434 sessions)
+  Mtime match (O(1) skip):     2433 (100.0%)
+  Hash match (content same):   0 (0.0%)
+  Full re-index (changed):     1 (0.0%)
+  Total avoided:               2433/2434 (100.0%)
+
+## Summary
+  Subsystem               | Uncached    | Cached      | Reduction
+  ------------------------|-------------|-------------|----------
+  Session indexing         |   4292.4 ms |    717.7 ms | 83%
+  Topic clustering        |      3.5 ms |    2.691 ms | 23%
+  Projects discovery      |     0.06 ms |   0.0258 ms | 54%
+  Cache hit rate (warm)   |           — |           — | 100% skipped
